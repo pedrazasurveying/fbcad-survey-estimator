@@ -10,18 +10,15 @@ st.title("📐 Instant Boundary Survey Estimate")
 query = st.text_input("Enter Property Address or Geographic ID")
 rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
 
-def search_parcel(query):
-    is_geo_id = any(char.isdigit() for char in query) and '-' in query
-    if is_geo_id:
-        where_clause = f"propnumber='{query}'"
-    else:
-        query_clean = query.replace("'", "''")
-        where_clause = f"situsaddress LIKE '%{query_clean}%'"
+def lookup_geo_id_from_address(address):
+    addr_clean = address.upper().replace(" ROAD", "").replace(" RD", "").replace(" STREET", "").replace(" ST", "").strip()
+    where_clause = f"situsaddress LIKE '%{addr_clean}%' AND accttype = 'R'"
 
     url = "https://gisweb.fbcad.org/arcgis/rest/services/Hosted/FBCAD_Public_Data/FeatureServer/0/query"
     params = {
         "where": where_clause,
         "outFields": "*",
+        "returnGeometry": "true",
         "outSR": "4326",
         "f": "geojson"
     }
@@ -29,38 +26,64 @@ def search_parcel(query):
     try:
         r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()
-        return r.json()
-    except requests.exceptions.RequestException:
-        st.error("❌ Network error while contacting Fort Bend CAD. Try again later.")
-        return {}
-    except ValueError:
-        st.error("❌ Unexpected response from FBCAD. Could not read parcel data.")
-        return {}
+        data = r.json()
+        if "features" in data and len(data["features"]) > 0:
+            return data["features"][0]  # return first real property parcel match
+        return None
+    except Exception:
+        return None
+
+def lookup_by_geo_id(geo_id):
+    where_clause = f"propnumber='{geo_id}'"
+    url = "https://gisweb.fbcad.org/arcgis/rest/services/Hosted/FBCAD_Public_Data/FeatureServer/0/query"
+    params = {
+        "where": where_clause,
+        "outFields": "*",
+        "returnGeometry": "true",
+        "outSR": "4326",
+        "f": "geojson"
+    }
+    r = requests.get(url, params=params, timeout=10)
+    r.raise_for_status()
+    return r.json()
 
 if st.button("Get Estimate"):
     if not query:
-        st.warning("Please enter a valid address or Geographic ID.")
+        st.warning("Please enter an address or Geographic ID.")
     else:
-        data = search_parcel(query)
-        if "features" in data and data["features"]:
-            feature = data["features"][0]
+        feature = None
+        # Determine if it's a Geo ID or address
+        if any(char.isdigit() for char in query) and '-' in query:
+            data = lookup_by_geo_id(query)
+            if "features" in data and data["features"]:
+                feature = data["features"][0]
+        else:
+            feature = lookup_geo_id_from_address(query)
+
+        if not feature:
+            st.error("❌ No real property parcel found matching your input.")
+        else:
             props = feature["properties"]
             try:
                 geom = shape(feature["geometry"])
-
-                # Project geometry from WGS84 to Texas South Central (ft)
                 project = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2277", always_xy=True).transform
                 geom_proj = transform(project, geom)
 
                 perimeter_ft = geom_proj.length
                 estimate = perimeter_ft * rate
+                area_ft2 = geom_proj.area
+                area_acres = area_ft2 / 43560
 
                 st.success("✅ Parcel found and estimate generated.")
                 st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
                 st.markdown(f"**Site Address:** {props.get('situsaddress', 'N/A')}")
+                st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
+                st.markdown(f"**Legal Description:** {props.get('legaldesc', 'N/A')}")
+                st.markdown(f"**Deed Reference:** {props.get('deedreference', 'N/A')}")
                 st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
                 st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
+
+                if area_acres < 2:
+                    st.info("ℹ️ This parcel appears to be less than 2 acres — consider checking if additional parcels are associated.")
             except Exception:
                 st.error("❌ Unable to process parcel geometry. Parcel may be missing shape data.")
-        else:
-            st.error("❌ No parcel found. Try refining the address or checking the ID.")
