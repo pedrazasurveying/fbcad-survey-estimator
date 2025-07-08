@@ -1,13 +1,12 @@
 import streamlit as st
 import requests
 from shapely.geometry import shape
-import math
+from shapely.ops import transform
+import pyproj
 
 st.set_page_config(page_title="Tejas Surveying - Instant Estimate", layout="centered")
-
 st.title("📐 Instant Boundary Survey Estimate")
 
-# User input
 query = st.text_input("Enter Property Address or Geographic ID")
 rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
 
@@ -31,7 +30,7 @@ def search_parcel(query):
         r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()
         return r.json()
-    except requests.exceptions.RequestException as e:
+    except requests.exceptions.RequestException:
         st.error("❌ Network error while contacting Fort Bend CAD. Try again later.")
         return {}
     except ValueError:
@@ -46,15 +45,22 @@ if st.button("Get Estimate"):
         if "features" in data and data["features"]:
             feature = data["features"][0]
             props = feature["properties"]
-            geom = shape(feature["geometry"])
-            perimeter_meters = geom.length
-            perimeter_ft = perimeter_meters * 3.28084
-            estimate = perimeter_ft * rate
+            try:
+                geom = shape(feature["geometry"])
 
-            st.success("✅ Parcel found and estimate generated.")
-            st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
-            st.markdown(f"**Site Address:** {props.get('situsaddress', 'N/A')}")
-            st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
-            st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
+                # Project geometry from WGS84 to Texas South Central (ft)
+                project = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2277", always_xy=True).transform
+                geom_proj = transform(project, geom)
+
+                perimeter_ft = geom_proj.length
+                estimate = perimeter_ft * rate
+
+                st.success("✅ Parcel found and estimate generated.")
+                st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
+                st.markdown(f"**Site Address:** {props.get('situsaddress', 'N/A')}")
+                st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
+                st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
+            except Exception:
+                st.error("❌ Unable to process parcel geometry. Parcel may be missing shape data.")
         else:
-            st.error("No parcel found. Try refining the address or checking the ID.")
+            st.error("❌ No parcel found. Try refining the address or checking the ID.")
