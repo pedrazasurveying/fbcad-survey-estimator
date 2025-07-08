@@ -26,8 +26,17 @@ def search_parcel(query):
         "outSR": "4326",
         "f": "geojson"
     }
-    r = requests.get(url, params=params)
-    return r.json()
+
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except requests.exceptions.RequestException as e:
+        st.error("❌ Network error while contacting Fort Bend CAD. Try again later.")
+        return {}
+    except ValueError:
+        st.error("❌ Unexpected response from FBCAD. Could not read parcel data.")
+        return {}
 
 if st.button("Get Estimate"):
     if not query:
