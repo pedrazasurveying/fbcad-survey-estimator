@@ -177,7 +177,7 @@ if feature:
         if acres: st.markdown(f"**Called Acreage:** {acres}")
         if deed:
             if deed.isdigit():
-                deed_url = f"https://www.fortbendcountyclerktexas.com/OfficialRecords/search?instrumentNumber={deed}"
+                deed_url = f"https://ccweb.co.fort-bend.tx.us/RealEstate/SearchEntry.aspx"
                 st.markdown(f"**Deed Reference:** [{deed}]({deed_url})")
             else:
                 st.markdown(f"**Deed Reference:** {deed}")
