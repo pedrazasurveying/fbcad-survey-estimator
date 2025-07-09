@@ -116,4 +116,5 @@ def query_parcels(where_clause):
     except Exception as e:
         st.error("❌ Error fetching parcel data.")
         st.text(str(e))
-        return []        return []        st.text(str(e))
+        st.text(str(e))
+        return []
