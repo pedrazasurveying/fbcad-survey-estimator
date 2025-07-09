@@ -1,3 +1,4 @@
+from datetime import datetime
 import streamlit as st
 import requests
 from shapely.geometry import shape
@@ -127,6 +128,7 @@ if query:
 if feature:
     props = feature["properties"]
     legal = props.get('legal', 'N/A')
+    quickrefid = props.get("quickrefid", "")
     deed = props.get('instrunum', '').strip()
     subdivision = block = lot = acres = None
 
@@ -139,6 +141,7 @@ if feature:
 
         st.success("✅ Parcel found and estimate generated.")
         st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
+        st.markdown(f"**Quick Ref ID:** {quickrefid}")
         st.markdown(f"**Geo ID:** {props.get('propnumber', 'N/A')}")
         st.markdown(f"**Legal Description:** {legal}")
         if subdivision:
@@ -158,6 +161,12 @@ if feature:
                 st.markdown(f"**Deed Reference:** {deed}")
         else:
             st.markdown("**Deed Reference:** N/A")
+        
+        if quickrefid:
+            esearch_url = f"https://esearch.fbcad.org/Property/View?Id={quickrefid}&year={datetime.now().year}"
+            st.markdown(f"**Deed History:** [View on FBCAD →]({esearch_url})")
+        else:
+            st.markdown("**Deed History:** Not available")
 
         st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
         st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
