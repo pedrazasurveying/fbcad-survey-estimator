@@ -78,7 +78,8 @@ def estimate_perimeter_cost(geom, rate):
     geom_proj = transform(project, geom)
     perimeter_ft = geom_proj.length
     area_ft2 = geom_proj.area
-    area_acres = area_ft2 / 43560    return perimeter_ft, area_acres
+    area_acres = area_ft2 / 43560
+    return perimeter_ft, area_acres
 
 def generate_kmz(geom, metadata=None, name="parcel.kmz"):
     kml = simplekml.Kml()
