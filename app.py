@@ -26,7 +26,9 @@ county_config = {
             "deed": "instrunum",
             "parcel_id": "propnumber",
             "quickrefid": "quickrefid",
-            "acres": "landsizeac"
+            "acres": "landsizeac",
+            "land_val": "landvalue",
+            "imp_val": "impvalue"
         }
     },
     "Harris": {
@@ -41,7 +43,9 @@ county_config = {
             "deed": "deed_ref",
             "parcel_id": "HCAD_NUM",
             "quickrefid": "LOWPARCELID",
-            "acres": "Acreage"
+            "acres": "Acreage",
+            "land_val": "LANDVAL",
+            "imp_val": "IMPRVAL"
         }
     }
 }
@@ -73,7 +77,7 @@ def query_parcels(where_clause):
     r.raise_for_status()
     return r.json().get("features", [])
 
-def estimate_perimeter_cost(geom, rate):
+def estimate_perimeter_cost(geom):
     project = pyproj.Transformer.from_crs("EPSG:4326", crs_target, always_xy=True).transform
     geom_proj = transform(project, geom)
     perimeter_ft = geom_proj.length
@@ -176,14 +180,15 @@ if feature:
 
     try:
         geom = shape(feature["geometry"])
-        perimeter_ft, area_acres = estimate_perimeter_cost(geom, rate)
+        perimeter_ft, area_acres = estimate_perimeter_cost(geom)
 
         st.success("✅ Parcel found and estimate generated.")
         st.markdown(f"**Owner:** {props.get(fields['owner'], 'N/A')}")
         st.markdown(f"**Quick Ref ID:** {quickrefid}")
         st.markdown(f"**Geo ID:** {props.get(fields['parcel_id'], 'N/A')}")
         st.markdown(f"**Legal Description:** {legal}")
-        if subdivision: st.markdown(f"**Subdivision:** {subdivision}")
+        if subdivision:
+            st.markdown(f"**Subdivision:** {subdivision}")
 
         if deed:
             if county == "Fort Bend":
@@ -198,8 +203,8 @@ if feature:
             st.markdown(f"**Deed History:** [View on FBCAD →]({esearch_url})")
 
         # Market Value
-        land_val = props.get("landvalue") or props.get("LANDVAL")
-        imp_val = props.get("impvalue") or props.get("IMPRVAL")
+        land_val = props.get(fields["land_val"])
+        imp_val = props.get(fields["imp_val"])
         try:
             land_val = float(land_val) if land_val else 0
             imp_val = float(imp_val) if imp_val else 0
@@ -212,7 +217,6 @@ if feature:
 
         st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
         st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
-        st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
 
         centroid = geom.centroid
         maps_url = f"https://www.google.com/maps/search/?api=1&query={centroid.y},{centroid.x}"
