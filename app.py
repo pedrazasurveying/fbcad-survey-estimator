@@ -189,3 +189,49 @@ if feature:
     except Exception as e:
         st.error("❌ Unable to process parcel geometry.")
         st.text(str(e))
+
+# KMZ generation
+        def generate_kmz(geom, metadata=None, name="parcel.kmz"):
+            kml = simplekml.Kml()
+            def add_polygon(g):
+                coords = [(x, y) for x, y in list(g.exterior.coords)]
+                poly = kml.newpolygon(name="Parcel", outerboundaryis=coords)
+                poly.style.polystyle.fill = 0
+                poly.style.linestyle.color = simplekml.Color.red
+                poly.style.linestyle.width = 5
+                if metadata:
+                    html = (
+                        f"<b>Owner:</b> {metadata['owner']}<br>"
+                        f"<b>Geo ID:</b> {metadata['propnumber']}<br>"
+                        f"<b>Legal:</b> {metadata['legal']}<br>"
+                        f"<b>Deed:</b> {metadata.get('deed', 'N/A')}<br>"
+                        f"<b>Perimeter:</b> {metadata.get('perimeter_ft', 'N/A')} ft"
+                    )
+                    poly.description = html
+            try:
+                if geom.geom_type == "Polygon":
+                    add_polygon(geom)
+                elif geom.geom_type == "MultiPolygon":
+                    for g in geom.geoms:
+                        add_polygon(g)
+                else:
+                    return None
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".kmz")
+                kml.savekmz(tmp.name)
+                return tmp.name
+            except Exception as e:
+                st.warning(f"KMZ error: {e}")
+                return None
+
+        # Generate KMZ and add download button
+        kmz_data = {
+            "owner": props.get(fields["owner"], "N/A"),
+            "propnumber": props.get(fields["parcel_id"], "N/A"),
+            "legal": legal,
+            "deed": deed,
+            "perimeter_ft": f"{perimeter_ft:,.2f}"
+        }
+        kmz_path = generate_kmz(geom, metadata=kmz_data)
+        if kmz_path:
+            with open(kmz_path, "rb") as f:
+                st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
