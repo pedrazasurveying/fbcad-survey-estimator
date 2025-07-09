@@ -67,15 +67,29 @@ def parse_legal_description(legal):
         acreage = acres_match.group(1)
     return subdivision, block, lot, acreage
 
-def generate_kmz(geom, name="parcel.kmz"):
+def generate_kmz(geom, metadata=None, name="parcel.kmz"):
     kml = simplekml.Kml()
     if geom.geom_type == "Polygon":
         coords = [(x, y) for x, y in list(geom.exterior.coords)]
-        kml.newpolygon(name="Parcel", outerboundaryis=coords)
+        poly = kml.newpolygon(name="Parcel", outerboundaryis=coords)
     elif geom.geom_type == "MultiPolygon":
-        for poly in geom.geoms:
-            coords = [(x, y) for x, y in list(poly.exterior.coords)]
-            kml.newpolygon(name="Parcel Part", outerboundaryis=coords)
+        for poly_geom in geom.geoms:
+            coords = [(x, y) for x, y in list(poly_geom.exterior.coords)]
+            poly = kml.newpolygon(name="Parcel Part", outerboundaryis=coords)
+    poly.style.polystyle.fill = 0
+    poly.style.linestyle.color = simplekml.Color.red
+    poly.style.linestyle.width = 5
+    if metadata:
+        html = f"""<b>Owner:</b> {metadata['owner']}<br>
+<b>Geo ID:</b> {metadata['propnumber']}<br>
+<b>Subdivision:</b> {metadata.get('subdivision', 'N/A')}<br>
+<b>Block:</b> {metadata.get('block', 'N/A')}<br>
+<b>Lot/Reserve:</b> {metadata.get('lot', 'N/A')}<br>
+<b>Called Acreage:</b> {metadata.get('acres', 'N/A')}<br>
+<b>Legal:</b> {metadata['legal']}<br>
+<b>Deed:</b> {metadata.get('deed', 'N/A')}<br>
+<b>Perimeter:</b> {metadata.get('perimeter_ft', 'N/A')} ft"""
+        poly.description = html
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".kmz")
     kml.savekmz(tmp.name)
     return tmp.name
@@ -152,7 +166,18 @@ if feature:
         st.markdown(f"**📍 View on Google Maps:** [Open Map]({maps_url})")
 
         # Add KMZ download
-        kmz_path = generate_kmz(geom)
+        kmz_data = {
+    "owner": props.get("ownername", "N/A"),
+    "propnumber": props.get("propnumber", "N/A"),
+    "legal": legal,
+    "subdivision": subdivision,
+    "block": block,
+    "lot": lot,
+    "acres": acres,
+    "deed": deed,
+    "perimeter_ft": f"{perimeter_ft:,.2f}"
+}
+kmz_path = generate_kmz(geom, metadata=kmz_data)
         with open(kmz_path, "rb") as f:
             st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
 
