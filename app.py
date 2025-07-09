@@ -5,8 +5,8 @@ from shapely.ops import transform
 import pyproj
 import re
 
-st.set_page_config(page_title="Tejas Surveying - Instant Estimate", layout="centered")
-st.title("📐 Instant Boundary Survey Estimate")
+st.set_page_config(page_title="Tejas Surveying - Address Lookup Debug", layout="centered")
+st.title("📍 Address Lookup - Smart Fallback Mode")
 
 query = st.text_input("Enter Property Address (e.g. 9439 Jeske Rd)")
 rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
@@ -19,8 +19,7 @@ def parse_address(address):
         return number.strip(), name.strip(), st_type.strip()
     return None, None, None
 
-def lookup_parcel_by_address(number, name, st_type):
-    where_clause = f"situssno = '{number}' AND situssnm LIKE '%{name}%' AND situsstp = '{st_type}'"
+def query_parcels(where_clause):
     url = "https://gisweb.fbcad.org/arcgis/rest/services/Hosted/FBCAD_Public_Data/FeatureServer/0/query"
     params = {
         "where": where_clause,
@@ -31,10 +30,7 @@ def lookup_parcel_by_address(number, name, st_type):
     }
     r = requests.get(url, params=params, timeout=10)
     r.raise_for_status()
-    data = r.json()
-    if "features" in data and data["features"]:
-        return data["features"][0]
-    return None
+    return r.json().get("features", [])
 
 def estimate_perimeter_cost(geom, rate):
     project = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2277", always_xy=True).transform
@@ -53,10 +49,30 @@ if st.button("Get Estimate"):
         if not all([number, name, st_type]):
             st.error("❌ Unable to parse address. Use format like '9439 Jeske Rd'")
         else:
-            feature = lookup_parcel_by_address(number, name, st_type)
-            if not feature:
-                st.error("❌ No real property parcel matched that address.")
+            # Try full match
+            where1 = f"situssno = '{number}' AND UPPER(situssnm) LIKE '%{name.upper()}%' AND UPPER(situsstp) = '{st_type.upper()}'"
+            matches = query_parcels(where1)
+
+            if not matches:
+                # Try number + street name only
+                where2 = f"situssno = '{number}' AND UPPER(situssnm) LIKE '%{name.upper()}%'"
+                matches = query_parcels(where2)
+
+            if not matches:
+                # Try just the street name
+                where3 = f"UPPER(situssnm) LIKE '%{name.upper()}%'"
+                matches = query_parcels(where3)
+
+            if not matches:
+                st.error("❌ No parcels found with any fallback method.")
+            elif len(matches) == 1:
+                feature = matches[0]
             else:
+                options = {f"{f['properties'].get('propnumber')} | {f['properties'].get('ownername', 'N/A')} | {f['properties'].get('legal', 'N/A')[:40]}": f for f in matches}
+                choice = st.selectbox("Multiple parcels found. Select one:", options.keys())
+                feature = options[choice]
+
+            if matches:
                 props = feature["properties"]
                 try:
                     geom = shape(feature["geometry"])
@@ -64,14 +80,11 @@ if st.button("Get Estimate"):
 
                     st.success("✅ Parcel found and estimate generated.")
                     st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
-                    st.markdown(f"**Address:** {query}")
-                    st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
+                    st.markdown(f"**Geo ID:** {props.get('propnumber', 'N/A')}")
                     st.markdown(f"**Legal Description:** {props.get('legal', 'N/A')}")
                     st.markdown(f"**Deed Reference:** {props.get('instrunum', 'N/A')}")
+                    st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
                     st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
                     st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
-
-                    if area_acres < 2:
-                        st.info("ℹ️ This parcel appears to be less than 2 acres — consider checking for additional parcels.")
                 except Exception:
                     st.error("❌ Unable to process parcel geometry.")
