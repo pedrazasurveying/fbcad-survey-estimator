@@ -128,9 +128,9 @@ if feature:
     props = feature["properties"]
     legal = props.get('legal', 'N/A')
     subdivision = block = lot = acres = None
-if legal and legal != "N/A":
+    if legal and legal != "N/A":
     subdivision, block, lot, acres = parse_legal_description(legal)
-try:
+    try:
     geom = shape(feature["geometry"])
     perimeter_ft, area_acres, estimate = estimate_perimeter_cost(geom, rate)
 
@@ -180,6 +180,6 @@ try:
     with open(kmz_path, "rb") as f:
         st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
 
-except Exception as e:
+    except Exception as e:
     st.error("❌ Unable to process parcel geometry.")
     st.text(str(e))
