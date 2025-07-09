@@ -180,6 +180,6 @@ try:
     with open(kmz_path, "rb") as f:
         st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
 
-    except Exception as e:
+except Exception as e:
     st.error("❌ Unable to process parcel geometry.")
     st.text(str(e))
