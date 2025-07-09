@@ -177,9 +177,21 @@ if feature:
     "deed": deed,
     "perimeter_ft": f"{perimeter_ft:,.2f}"
 }
-kmz_path = generate_kmz(geom, metadata=kmz_data)
+     kmz_data = {
+            "owner": props.get("ownername", "N/A"),
+            "propnumber": props.get("propnumber", "N/A"),
+            "legal": legal,
+            "subdivision": subdivision,
+            "block": block,
+            "lot": lot,
+            "acres": acres,
+            "deed": deed,
+            "perimeter_ft": f"{perimeter_ft:,.2f}"
+        }
+        kmz_path = generate_kmz(geom, metadata=kmz_data)
         with open(kmz_path, "rb") as f:
             st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
 
-    except Exception:
+    except Exception as e:
         st.error("❌ Unable to process parcel geometry.")
+        st.text(str(e))
