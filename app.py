@@ -4,9 +4,11 @@ from shapely.geometry import shape
 from shapely.ops import transform
 import pyproj
 import re
+import simplekml
+import tempfile
 
 st.set_page_config(page_title="Tejas Surveying - Smart Estimate", layout="centered")
-st.title("📍 Address Lookup with Fallback + Deed Link")
+st.title("📍 Address Lookup with Deed, Map & KMZ")
 
 query = st.text_input("Enter Property Address (e.g. 9439 Jeske or Jeske Rd)")
 rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
@@ -42,6 +44,41 @@ def estimate_perimeter_cost(geom, rate):
     area_acres = area_ft2 / 43560
     estimate = perimeter_ft * rate
     return perimeter_ft, area_acres, estimate
+
+def parse_legal_description(legal):
+    subdivision = block = lot = acreage = None
+    legal = legal.strip()
+    subdivision_match = re.match(r'^(.*?)(BLOCK|LOT|RESERVE|ACRES)', legal, re.IGNORECASE)
+    if subdivision_match:
+        subdivision = subdivision_match.group(1).strip(", ").title()
+    block_match = re.search(r'BLOCK\s+(\w+)', legal, re.IGNORECASE)
+    if not block_match:
+        block_match = re.search(r'BLK\s+(\w+)', legal, re.IGNORECASE)
+    if block_match:
+        block = block_match.group(1)
+    lot_match = re.search(r'LOT\s+["\w]+', legal, re.IGNORECASE)
+    if lot_match:
+        lot = lot_match.group(0).strip()
+    reserve_match = re.search(r'RESERVE\s+["\w\s]+', legal, re.IGNORECASE)
+    if reserve_match:
+        lot = reserve_match.group(0).strip()
+    acres_match = re.search(r'ACRES\s+([0-9.]+)', legal, re.IGNORECASE)
+    if acres_match:
+        acreage = acres_match.group(1)
+    return subdivision, block, lot, acreage
+
+def generate_kmz(geom, name="parcel.kmz"):
+    kml = simplekml.Kml()
+    if geom.geom_type == "Polygon":
+        coords = [(x, y) for x, y in list(geom.exterior.coords)]
+        kml.newpolygon(name="Parcel", outerboundaryis=coords)
+    elif geom.geom_type == "MultiPolygon":
+        for poly in geom.geoms:
+            coords = [(x, y) for x, y in list(poly.exterior.coords)]
+            kml.newpolygon(name="Parcel Part", outerboundaryis=coords)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".kmz")
+    kml.savekmz(tmp.name)
+    return tmp.name
 
 feature = None
 
@@ -82,15 +119,42 @@ if feature:
         st.success("✅ Parcel found and estimate generated.")
         st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
         st.markdown(f"**Geo ID:** {props.get('propnumber', 'N/A')}")
-        st.markdown(f"**Legal Description:** {props.get('legal', 'N/A')}")
-        deed = props.get('instrunum', '')
+
+        legal = props.get('legal', 'N/A')
+        st.markdown(f"**Legal Description:** {legal}")
+        subdivision, block, lot, acres = parse_legal_description(legal)
+        if subdivision:
+            st.markdown(f"**Subdivision:** {subdivision}")
+        if block:
+            st.markdown(f"**Block:** {block}")
+        if lot:
+            st.markdown(f"**Lot/Reserve:** {lot}")
+        if acres:
+            st.markdown(f"**Called Acreage:** {acres}")
+
+        deed = props.get('instrunum', '').strip()
         if deed:
-            deed_url = f"https://www.fortbendcountyclerktexas.com/OfficialRecords/search?instrumentNumber={deed}"
-            st.markdown(f"**Deed Reference:** [{deed}]({deed_url})")
+            if deed.isdigit():
+                deed_url = f"https://www.fortbendcountyclerktexas.com/OfficialRecords/search?instrumentNumber={deed}"
+                st.markdown(f"**Deed Reference:** [{deed}]({deed_url})")
+            else:
+                st.markdown(f"**Deed Reference:** {deed}")
         else:
             st.markdown("**Deed Reference:** N/A")
+
         st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
         st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
         st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
+
+        # Add Google Maps link
+        centroid = geom.centroid
+        maps_url = f"https://www.google.com/maps/search/?api=1&query={centroid.y},{centroid.x}"
+        st.markdown(f"**📍 View on Google Maps:** [Open Map]({maps_url})")
+
+        # Add KMZ download
+        kmz_path = generate_kmz(geom)
+        with open(kmz_path, "rb") as f:
+            st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
+
     except Exception:
         st.error("❌ Unable to process parcel geometry.")
