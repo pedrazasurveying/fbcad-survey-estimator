@@ -129,8 +129,8 @@ if feature:
     legal = props.get('legal', 'N/A')
     subdivision = block = lot = acres = None
     if legal and legal != "N/A":
-    subdivision, block, lot, acres = parse_legal_description(legal)
-    try:
+        subdivision, block, lot, acres = parse_legal_description(legal)
+try:
     geom = shape(feature["geometry"])
     perimeter_ft, area_acres, estimate = estimate_perimeter_cost(geom, rate)
 
