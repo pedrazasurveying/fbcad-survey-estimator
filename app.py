@@ -12,11 +12,8 @@ st.set_page_config(page_title="Tejas Surveying - Smart Estimate", layout="center
 st.title("📍 Property Lookup with Deed, Map & KMZ")
 
 rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
-
-# Select county
 county = st.selectbox("Select County", ["Fort Bend", "Harris"])
 
-# Configuration for each county
 county_config = {
     "Fort Bend": {
         "endpoint": "https://gisweb.fbcad.org/arcgis/rest/services/Hosted/FBCAD_Public_Data/FeatureServer/0/query",
@@ -86,7 +83,38 @@ def estimate_perimeter_cost(geom, rate):
     estimate = perimeter_ft * rate
     return perimeter_ft, area_acres, estimate
 
-# Search UI
+def generate_kmz(geom, metadata=None, name="parcel.kmz"):
+    kml = simplekml.Kml()
+    def add_polygon(g):
+        coords = [(x, y) for x, y in list(g.exterior.coords)]
+        poly = kml.newpolygon(name="Parcel", outerboundaryis=coords)
+        poly.style.polystyle.fill = 0
+        poly.style.linestyle.color = simplekml.Color.red
+        poly.style.linestyle.width = 5
+        if metadata:
+            html = (
+                f"<b>Owner:</b> {metadata['owner']}<br>"
+                f"<b>Geo ID:</b> {metadata['propnumber']}<br>"
+                f"<b>Legal:</b> {metadata['legal']}<br>"
+                f"<b>Deed:</b> {metadata.get('deed', 'N/A')}<br>"
+                f"<b>Perimeter:</b> {metadata.get('perimeter_ft', 'N/A')} ft"
+            )
+            poly.description = html
+    try:
+        if geom.geom_type == "Polygon":
+            add_polygon(geom)
+        elif geom.geom_type == "MultiPolygon":
+            for g in geom.geoms:
+                add_polygon(g)
+        else:
+            return None
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".kmz")
+        kml.savekmz(tmp.name)
+        return tmp.name
+    except Exception as e:
+        st.warning(f"KMZ error: {e}")
+        return None
+
 search_mode = st.radio("Search by:", ["Address", "Quick Ref ID", "Owner Name"])
 query = ""
 last = first = ""
@@ -126,7 +154,6 @@ elif search_mode == "Owner Name":
             where = f"UPPER({fields['owner']}) LIKE '{lname}%'"
         matches = query_parcels(where)
 
-# Feature selection
 feature = None
 if matches:
     if len(matches) == 1:
@@ -136,31 +163,18 @@ if matches:
             f"{f['properties'].get(fields['quickrefid'])} | {f['properties'].get(fields['owner'])} | {f['properties'].get(fields['legal'], '')[:40]}": f
             for f in matches
         }
-        option_keys = list(options.keys())
-        default_index = 0
-        if "selected_option" not in st.session_state:
-            st.session_state.selected_option = option_keys[0]
-        else:
-            try:
-                default_index = option_keys.index(st.session_state.selected_option)
-            except ValueError:
-                default_index = 0
-        selected = st.selectbox("Multiple parcels found. Select one:", option_keys, index=default_index, key="parcel_selectbox")
-        st.session_state.selected_option = selected
-        feature = options[selected]
+        selected = st.selectbox("Multiple parcels found. Select one:", list(options.keys()))
+        if selected:
+            feature = options[selected]
 elif query or last:
     st.warning("No matching parcels found.")
 
-# Display output
 if feature:
     props = feature["properties"]
     legal = props.get(fields["legal"], "N/A")
     quickrefid = props.get(fields["quickrefid"], "")
     deed = props.get(fields.get("deed", ""), "").strip()
-    subdivision = block = lot = acres = None
-
-    if legal and legal != "N/A":
-        subdivision = legal.split(",")[0].title()
+    subdivision = legal.split(",")[0].title() if legal and legal != "N/A" else None
 
     try:
         geom = shape(feature["geometry"])
@@ -171,59 +185,18 @@ if feature:
         st.markdown(f"**Quick Ref ID:** {quickrefid}")
         st.markdown(f"**Geo ID:** {props.get(fields['parcel_id'], 'N/A')}")
         st.markdown(f"**Legal Description:** {legal}")
-        if subdivision: st.markdown(f"**Subdivision:** {subdivision}")
-        if acres: st.markdown(f"**Called Acreage:** {props.get(fields['acres'], 'N/A')}")
+        if subdivision:
+            st.markdown(f"**Subdivision:** {subdivision}")
         if deed:
             st.markdown(f"**Deed Reference:** {deed} — [Search Site](https://ccweb.co.fort-bend.tx.us/RealEstate/SearchEntry.aspx)")
-        else:
-            st.markdown("**Deed Reference:** N/A")
         st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
         st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
         st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
 
-        # Google Maps
         centroid = geom.centroid
         maps_url = f"https://www.google.com/maps/search/?api=1&query={centroid.y},{centroid.x}"
         st.markdown(f"**📍 View on Google Maps:** [Open Map]({maps_url})")
 
-    except Exception as e:
-        st.error("❌ Unable to process parcel geometry.")
-        st.text(str(e))
-
-# KMZ generation
-        def generate_kmz(geom, metadata=None, name="parcel.kmz"):
-            kml = simplekml.Kml()
-            def add_polygon(g):
-                coords = [(x, y) for x, y in list(g.exterior.coords)]
-                poly = kml.newpolygon(name="Parcel", outerboundaryis=coords)
-                poly.style.polystyle.fill = 0
-                poly.style.linestyle.color = simplekml.Color.red
-                poly.style.linestyle.width = 5
-                if metadata:
-                    html = (
-                        f"<b>Owner:</b> {metadata['owner']}<br>"
-                        f"<b>Geo ID:</b> {metadata['propnumber']}<br>"
-                        f"<b>Legal:</b> {metadata['legal']}<br>"
-                        f"<b>Deed:</b> {metadata.get('deed', 'N/A')}<br>"
-                        f"<b>Perimeter:</b> {metadata.get('perimeter_ft', 'N/A')} ft"
-                    )
-                    poly.description = html
-            try:
-                if geom.geom_type == "Polygon":
-                    add_polygon(geom)
-                elif geom.geom_type == "MultiPolygon":
-                    for g in geom.geoms:
-                        add_polygon(g)
-                else:
-                    return None
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".kmz")
-                kml.savekmz(tmp.name)
-                return tmp.name
-            except Exception as e:
-                st.warning(f"KMZ error: {e}")
-                return None
-
-        # Generate KMZ and add download button
         kmz_data = {
             "owner": props.get(fields["owner"], "N/A"),
             "propnumber": props.get(fields["parcel_id"], "N/A"),
@@ -235,3 +208,7 @@ if feature:
         if kmz_path:
             with open(kmz_path, "rb") as f:
                 st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
+
+    except Exception as e:
+        st.error("❌ Unable to process parcel geometry.")
+        st.text(str(e))
