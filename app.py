@@ -66,10 +66,6 @@ if matches:
 else:
     if query or last:
         st.warning("No matching parcels found.")
-if query:
-    number, name, st_type = parse_address_loose(query)
-    if not name:
-        st.error("❌ Could not parse address. Try something like '9439 Jeske Rd' or 'Jeske'")
     else:
         matches = []
         if number and st_type:
