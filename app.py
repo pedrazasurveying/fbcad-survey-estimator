@@ -11,10 +11,8 @@ import tempfile
 st.set_page_config(page_title="Tejas Surveying - Smart Estimate", layout="centered")
 st.title("📍 Property Lookup with Deed, Map & KMZ")
 
-# Rate input
 rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
 
-# 🔍 Search options
 search_mode = st.radio("Search by:", ["Address", "Quick Ref ID", "Owner Name"])
 query = ""
 last = first = ""
@@ -103,7 +101,7 @@ def generate_kmz(geom, metadata=None, name="parcel.kmz"):
     kml.savekmz(tmp.name)
     return tmp.name
 
-# Search input logic
+# Search logic
 if search_mode == "Address":
     query = st.text_input("Enter Property Address (e.g. 1810 First Oaks or First Oaks St)")
     if query:
@@ -135,7 +133,7 @@ elif search_mode == "Owner Name":
             where = f"UPPER(ownername) LIKE '{lname}%'"
         matches = query_parcels(where)
 
-# Pick a feature if matches found
+# Feature selection with session-state persistence
 feature = None
 if matches:
     if len(matches) == 1:
@@ -145,13 +143,22 @@ if matches:
             f"{f['properties'].get('quickrefid')} | {f['properties'].get('ownername')} | {f['properties'].get('legal', '')[:40]}": f
             for f in matches
         }
-        selected = st.selectbox("Multiple parcels found. Select one:", list(options.keys()))
-        if selected:
-            feature = options[selected]
+        option_keys = list(options.keys())
+        default_index = 0
+        if "selected_option" not in st.session_state:
+            st.session_state.selected_option = option_keys[0]
+        else:
+            try:
+                default_index = option_keys.index(st.session_state.selected_option)
+            except ValueError:
+                default_index = 0
+        selected = st.selectbox("Multiple parcels found. Select one:", option_keys, index=default_index, key="parcel_selectbox")
+        st.session_state.selected_option = selected
+        feature = options[selected]
 elif query or last:
     st.warning("No matching parcels found.")
 
-# Output parcel info
+# Parcel display
 if feature:
     props = feature["properties"]
     legal = props.get("legal", "N/A")
@@ -176,11 +183,8 @@ if feature:
         if lot: st.markdown(f"**Lot/Reserve:** {lot}")
         if acres: st.markdown(f"**Called Acreage:** {acres}")
         if deed:
-            if deed.isdigit():
-                deed_url = f"https://ccweb.co.fort-bend.tx.us/RealEstate/SearchEntry.aspx"
-                st.markdown(f"**Deed Reference:** [{deed}]({deed_url})")
-            else:
-                st.markdown(f"**Deed Reference:** {deed}")
+            deed_url = "https://ccweb.co.fort-bend.tx.us/RealEstate/SearchEntry.aspx"
+            st.markdown(f"**Deed Reference:** {deed} — [Search Site]({deed_url})")
         else:
             st.markdown("**Deed Reference:** N/A")
         if quickrefid:
