@@ -126,6 +126,7 @@ if query:
 
 if feature:
     props = feature["properties"]
+    legal = props.get('legal', 'N/A')
 try:
     geom = shape(feature["geometry"])
     perimeter_ft, area_acres, estimate = estimate_perimeter_cost(geom, rate)
