@@ -66,29 +66,6 @@ if matches:
 else:
     if query or last:
         st.warning("No matching parcels found.")
-    else:
-        matches = []
-        if number and st_type:
-            where1 = f"situssno = '{number}' AND UPPER(situssnm) LIKE '%{name.upper()}%' AND UPPER(situsstp) = '{st_type.upper()}'"
-            matches = query_parcels(where1)
-
-        if not matches and number:
-            where2 = f"situssno = '{number}' AND UPPER(situssnm) LIKE '%{name.upper()}%'"
-            matches = query_parcels(where2)
-
-        if not matches:
-            where3 = f"UPPER(situssnm) LIKE '%{name.upper()}%'"
-            matches = query_parcels(where3)
-
-        if not matches:
-            st.error("❌ No parcels found with any fallback method.")
-        elif len(matches) == 1:
-            feature = matches[0]
-        else:
-            options = {f"{f['properties'].get('propnumber')} | {f['properties'].get('ownername', 'N/A')} | {f['properties'].get('legal', 'N/A')[:40]}": f for f in matches}
-            selected = st.selectbox("Multiple parcels found. Select one:", list(options.keys()))
-            if selected:
-                feature = options[selected]
 
 if feature:
     props = feature["properties"]
