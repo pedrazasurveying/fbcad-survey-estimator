@@ -126,72 +126,56 @@ if query:
 
 if feature:
     props = feature["properties"]
-    try:
-        geom = shape(feature["geometry"])
-        perimeter_ft, area_acres, estimate = estimate_perimeter_cost(geom, rate)
+try:
+    geom = shape(feature["geometry"])
+    perimeter_ft, area_acres, estimate = estimate_perimeter_cost(geom, rate)
 
-        st.success("✅ Parcel found and estimate generated.")
-        st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
-        st.markdown(f"**Geo ID:** {props.get('propnumber', 'N/A')}")
-
-        legal = props.get('legal', 'N/A')
-        st.markdown(f"**Legal Description:** {legal}")
-        subdivision, block, lot, acres = parse_legal_description(legal)
-        if subdivision:
-            st.markdown(f"**Subdivision:** {subdivision}")
-        if block:
-            st.markdown(f"**Block:** {block}")
-        if lot:
-            st.markdown(f"**Lot/Reserve:** {lot}")
-        if acres:
-            st.markdown(f"**Called Acreage:** {acres}")
-
-        deed = props.get('instrunum', '').strip()
-        if deed:
-            if deed.isdigit():
-                deed_url = f"https://www.fortbendcountyclerktexas.com/OfficialRecords/search?instrumentNumber={deed}"
-                st.markdown(f"**Deed Reference:** [{deed}]({deed_url})")
-            else:
-                st.markdown(f"**Deed Reference:** {deed}")
+    st.success("✅ Parcel found and estimate generated.")
+    st.markdown(f"**Owner:** {props.get('ownername', 'N/A')}")
+    st.markdown(f"**Geo ID:** {props.get('propnumber', 'N/A')}")
+    st.markdown(f"**Legal Description:** {legal}")
+    if subdivision:
+        st.markdown(f"**Subdivision:** {subdivision}")
+    if block:
+        st.markdown(f"**Block:** {block}")
+    if lot:
+        st.markdown(f"**Lot/Reserve:** {lot}")
+    if acres:
+        st.markdown(f"**Called Acreage:** {acres}")
+    if deed:
+        if deed.isdigit():
+            deed_url = f"https://www.fortbendcountyclerktexas.com/OfficialRecords/search?instrumentNumber={deed}"
+            st.markdown(f"**Deed Reference:** [{deed}]({deed_url})")
         else:
-            st.markdown("**Deed Reference:** N/A")
+            st.markdown(f"**Deed Reference:** {deed}")
+    else:
+        st.markdown("**Deed Reference:** N/A")
+    st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
+    st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
+    st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
 
-        st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
-        st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
-        st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
+    # Google Maps
+    centroid = geom.centroid
+    maps_url = f"https://www.google.com/maps/search/?api=1&query={centroid.y},{centroid.x}"
+    st.markdown(f"**📍 View on Google Maps:** [Open Map]({maps_url})")
 
-        # Add Google Maps link
-        centroid = geom.centroid
-        maps_url = f"https://www.google.com/maps/search/?api=1&query={centroid.y},{centroid.x}"
-        st.markdown(f"**📍 View on Google Maps:** [Open Map]({maps_url})")
+    # KMZ
+    kmz_data = {
+        "owner": props.get("ownername", "N/A"),
+        "propnumber": props.get("propnumber", "N/A"),
+        "legal": legal,
+        "subdivision": subdivision,
+        "block": block,
+        "lot": lot,
+        "acres": acres,
+        "deed": deed,
+        "perimeter_ft": f"{perimeter_ft:,.2f}"
+    }
 
-        # Add KMZ download
-        kmz_data = {
-    "owner": props.get("ownername", "N/A"),
-    "propnumber": props.get("propnumber", "N/A"),
-    "legal": legal,
-    "subdivision": subdivision,
-    "block": block,
-    "lot": lot,
-    "acres": acres,
-    "deed": deed,
-    "perimeter_ft": f"{perimeter_ft:,.2f}"
-}
-     kmz_data = {
-            "owner": props.get("ownername", "N/A"),
-            "propnumber": props.get("propnumber", "N/A"),
-            "legal": legal,
-            "subdivision": subdivision,
-            "block": block,
-            "lot": lot,
-            "acres": acres,
-            "deed": deed,
-            "perimeter_ft": f"{perimeter_ft:,.2f}"
-        }
-        kmz_path = generate_kmz(geom, metadata=kmz_data)
-        with open(kmz_path, "rb") as f:
-            st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
+    kmz_path = generate_kmz(geom, metadata=kmz_data)
+    with open(kmz_path, "rb") as f:
+        st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
 
-    except Exception as e:
-        st.error("❌ Unable to process parcel geometry.")
-        st.text(str(e))
+except Exception as e:
+    st.error("❌ Unable to process parcel geometry.")
+    st.text(str(e))
