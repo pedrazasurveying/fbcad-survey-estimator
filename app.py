@@ -11,7 +11,6 @@ import tempfile
 st.set_page_config(page_title="Tejas Surveying - Smart Estimate", layout="centered")
 st.title("📍 Property Lookup with Deed, Map & KMZ")
 
-rate = st.number_input("Rate per foot ($)", min_value=0.0, value=1.25)
 county = st.selectbox("Select County", ["Fort Bend", "Harris"])
 
 county_config = {
@@ -79,9 +78,7 @@ def estimate_perimeter_cost(geom, rate):
     geom_proj = transform(project, geom)
     perimeter_ft = geom_proj.length
     area_ft2 = geom_proj.area
-    area_acres = area_ft2 / 43560
-    estimate = perimeter_ft * rate
-    return perimeter_ft, area_acres, estimate
+    area_acres = area_ft2 / 43560    return perimeter_ft, area_acres
 
 def generate_kmz(geom, metadata=None, name="parcel.kmz"):
     kml = simplekml.Kml()
@@ -178,17 +175,40 @@ if feature:
 
     try:
         geom = shape(feature["geometry"])
-        perimeter_ft, area_acres, estimate = estimate_perimeter_cost(geom, rate)
+        perimeter_ft, area_acres = estimate_perimeter_cost(geom, rate)
 
         st.success("✅ Parcel found and estimate generated.")
         st.markdown(f"**Owner:** {props.get(fields['owner'], 'N/A')}")
         st.markdown(f"**Quick Ref ID:** {quickrefid}")
         st.markdown(f"**Geo ID:** {props.get(fields['parcel_id'], 'N/A')}")
         st.markdown(f"**Legal Description:** {legal}")
-        if subdivision:
-            st.markdown(f"**Subdivision:** {subdivision}")
+        if subdivision: st.markdown(f"**Subdivision:** {subdivision}")
+
         if deed:
-            st.markdown(f"**Deed Reference:** {deed} — [Search Site](https://ccweb.co.fort-bend.tx.us/RealEstate/SearchEntry.aspx)")
+            if county == "Fort Bend":
+                st.markdown(f"**Deed Reference:** {deed} — [Search Site](https://ccweb.co.fort-bend.tx.us/RealEstate/SearchEntry.aspx)")
+            else:
+                st.markdown(f"**Deed Reference:** {deed}")
+        else:
+            st.markdown("**Deed Reference:** N/A")
+
+        if county == "Fort Bend" and quickrefid:
+            esearch_url = f"https://esearch.fbcad.org/Property/View?Id={quickrefid}&year={datetime.now().year}"
+            st.markdown(f"**Deed History:** [View on FBCAD →]({esearch_url})")
+
+        # Market Value
+        land_val = props.get("landvalue") or props.get("LANDVAL")
+        imp_val = props.get("impvalue") or props.get("IMPRVAL")
+        try:
+            land_val = float(land_val) if land_val else 0
+            imp_val = float(imp_val) if imp_val else 0
+            total_val = land_val + imp_val
+            st.markdown(f"**Market Value:** ${total_val:,.2f}")
+            st.markdown(f"- Land: ${land_val:,.2f}")
+            st.markdown(f"- Improvements: ${imp_val:,.2f}")
+        except:
+            st.markdown("**Market Value:** N/A")
+
         st.markdown(f"**Parcel Size:** {area_acres:.2f} acres")
         st.markdown(f"**Perimeter:** {perimeter_ft:.2f} ft")
         st.markdown(f"**Estimated Survey Cost:** ${estimate:,.2f}")
@@ -197,6 +217,7 @@ if feature:
         maps_url = f"https://www.google.com/maps/search/?api=1&query={centroid.y},{centroid.x}"
         st.markdown(f"**📍 View on Google Maps:** [Open Map]({maps_url})")
 
+        # KMZ
         kmz_data = {
             "owner": props.get(fields["owner"], "N/A"),
             "propnumber": props.get(fields["parcel_id"], "N/A"),
