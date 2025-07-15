@@ -1,4 +1,3 @@
-
 from datetime import datetime
 import streamlit as st
 import requests
@@ -178,6 +177,7 @@ if feature:
     props = feature["properties"]
     legal = props.get(fields["legal"], "N/A")
     quickrefid = props.get(fields["quickrefid"], "")
+    address = f"{props.get(fields['street_num'], '')} {props.get(fields['street_name'], '')} {props.get(fields['street_type'], '')}".strip()
     deed = props.get(fields.get("deed", ""), "").strip()
     owner = props.get(fields["owner"], "N/A")
     market_val = props.get(fields.get("market", ""), "N/A")
@@ -199,6 +199,7 @@ if feature:
         st.markdown(f"**Owner:** {owner}")
         st.markdown(f"**Quick Ref ID:** {quickrefid}")
         st.markdown(f"**Geo ID:** {props.get(fields['parcel_id'], 'N/A')}")
+        st.markdown(f"**Address:** {address}")
         st.markdown(f"**Legal Description:** {legal}")
         if subdivision: st.markdown(f"**Subdivision:** {subdivision}")
         if block: st.markdown(f"**Block:** {block}")
@@ -232,7 +233,7 @@ if feature:
 
         kmz_path = generate_kmz(geom, metadata=kmz_data)
         with open(kmz_path, "rb") as f:
-            st.download_button("📥 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
+            st.download_button("📅 Download KMZ (Google Earth)", f, file_name="parcel.kmz")
 
     except Exception as e:
         st.error("❌ Unable to process parcel geometry.")
